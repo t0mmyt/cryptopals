@@ -4,6 +4,7 @@ use std::io::{self, BufRead};
 use std::fs::{File};
 use std::path::Path;
 use std::str;
+use openssl::symm::{decrypt, Cipher};
 
 const VOWELS_SPACES: &str = "aeiouAEIOU ";
 
@@ -20,6 +21,20 @@ fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
     where P: AsRef<Path>, {
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
+}
+
+fn bytes_from_b64_file(path: &str) -> Vec<u8> {
+    let mut bytes = vec![];
+    for line in read_lines(path).unwrap() {
+        match line {
+            Ok(l) => {
+                let mut new_bytes = base64::decode(&l).unwrap();
+                bytes.append(&mut new_bytes);
+            }
+            _ => {}
+        };
+    }
+    bytes
 }
 
 #[allow(dead_code)]
@@ -130,6 +145,12 @@ fn break_repeating_xor(input: &Vec<u8>, max_keysize: usize, top_n: usize) -> Vec
     final_guess_key
 }
 
+#[allow(dead_code)]
+fn decrypt_aes128_ecb(input: &Vec<u8>, key: &Vec<u8>) -> Vec<u8> {
+    let iv = [0u8];
+    decrypt(Cipher::aes_128_ecb(), &key.as_slice(), Some(&iv), &input).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,17 +211,16 @@ mod tests {
 
     #[test]
     fn test_break_repeating_xor() {
-        let mut bytes = vec![];
-        for line in read_lines("data/6.txt").unwrap() {
-            match line {
-                Ok(l) => {
-                    let mut new_bytes = base64::decode(&l).unwrap();
-                    bytes.append(&mut new_bytes);
-                }
-                _ => {}
-            };
-        }
+        let bytes = bytes_from_b64_file("data/6.txt");
         let k = break_repeating_xor(&bytes, 40, 5);
         println!("{:?}", str::from_utf8(&xor_bytes(&bytes, &k)).unwrap());
+    }
+
+    #[test]
+    fn decrypt_aes_128_ecb() {
+        let bytes = bytes_from_b64_file("data/7.txt");
+        let key = "YELLOW SUBMARINE".as_bytes().to_vec();
+        let output = decrypt_aes128_ecb(&bytes, &key);
+        println!("{:?}", str::from_utf8(&output).unwrap())
     }
 }
